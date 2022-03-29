@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title> Task Switch Exp </title>
+  <link rel="stylesheet" href = "style.css" type = "text/css" charset = "utf-8">
+  <script type="text/javascript" src="jquery-3.1.1.js"> </script>
+  <script type="text/javascript" src="shuffle.js"></script>
+  <script type="text/javascript" src="PS_50.js"></script>
+  <script type="text/javascript" src="PS_high.js"></script>
+  <script type="text/javascript" src="PS_low.js"></script>
+  <script type="text/javascript" src="switchCues.js"></script>
+  <script type="text/javascript" src="is_even.js"></script>
+  <script type="text/javascript" src="check_dup.js"></script>
+  <script type="text/javascript" src="cnt_consecutive_elements.js"></script>
+  <script type="text/javascript">
+
+  $(document).ready(function(){
+    //these lines below are important for running subjects online but don't worry about them yet
+    //document.getElementById('assignmentId').value = window.opener.document.getElementById('assignmentId').value;
+    //document.getElementById('hitId').value = window.opener.document.getElementById('hitId').value;
+    //document.getElementById('workerId').value = window.opener.document.getElementById('workerId').value;
+
+    let canvas = document.getElementById("myCanvas");
+    let ctx = canvas.getContext("2d"); //canvas for instructions and frames
+
+    let digits = ['1','2','3','4','6','7','8','9'];
+
+      //disabling mouse clicks in the task
+    //from: http://stackoverflow.com/questions/8595909/how-to-completley-disable-any-mouse-click
+    let event1 = $(document).click(function(e) {
+          e.stopPropagation();
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          return false;
+    });
+
+    //from: http://stackoverflow.com/questions/8595909/how-to-completley-disable-any-mouse-click
+      //disable right click
+      $(document).bind('contextmenu', function(e) {
+          e.stopPropagation();
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          return false;
+      });
+
+    //Stops backspace presses (8) and spaces (32);
+    //from: http://stackoverflow.com/questions/1495219/how-can-i-prevent-the-backspace-key-from-navigating-back
+      $(function(){
+    let rx = /INPUT|SELECT|TEXTAREA/i;
+      $(document).bind("keydown keypress", function(e){
+      if( e.which == 32 ||e.which == 8 )
+      { // 8 == backspace
+        if(!rx.test(e.target.tagName) || e.target.disabled || e.target.readOnly )
+        {
+            e.preventDefault();
+        }
+        }
+      });
+      });
+
+    //Demographics, launches after startPostTest button is clicked
+    ///All experiment data is uploaded to server when the demoSubmit button is clicked
+
+    	let demodata = [[""]];
+
+    	//from: https://stackoverflow.com/questions/19846078/how-to-read-from-chromes-console-in-javascript
+    	//this is because the bisbasdata is defined locally within the record_data.js, which makes it hard to bind the HTML element, so I console.log the data and then assign the HTML element that console value in this script
+    	console.stdlog = console.log.bind(console);
+    	console.logs = [];
+    	console.log = function(){
+    		console.logs.push(Array.from(arguments));
+    		console.stdlog.apply(console, arguments);
+    	}
+
+    	$("#startPostTest").click(function(){
+    		$("#startPostTest").hide(); // hide the button & reminder that their screen should be maxed out
+    		$("#screensize").hide();
+    		$("#demographics").show();
+    	});
+
+    	//when they submit demographics form, make sure they have selected a value for every item; otherwise they can't pass onto the next screen
+    	$("#demoSubmit").click(function(){
+    		if (document.getElementById("gender").options[document.getElementById("gender").selectedIndex].value == "" || document.getElementById("age").value == "" || document.getElementById("ethnicity").options[document.getElementById("ethnicity").selectedIndex].value == "" || document.getElementById("race").options[document.getElementById("race").selectedIndex].value == "")
+    		{alert('Please make sure to fill out the demographic questionnaire!');}
+    		else{
+    			demodata[0] = "Demographics:;"; //primarily because this is the format of my csv file creator
+    			demodata[1] = document.getElementById("gender").options[document.getElementById("gender").selectedIndex].value;
+    			demodata[2] = document.getElementById("age").value;
+    			demodata[3] = document.getElementById("ethnicity").options[document.getElementById("ethnicity").selectedIndex].value;
+    			demodata[4] = document.getElementById("race").options[document.getElementById("race").selectedIndex].value;
+
+          $("#demos").val(demodata.join(","));
+
+    			$("#demographics").hide(); //after submitting demographic data, show post-test
+          document.getElementById("mturk_form").submit();
+              opener.updateMainMenu(2);
+              //window.close();
+    		}
+    	});
+
+    //document.getElementById('SONAurl').value = window.opener.document.getElementById('SONAurl').value;
+
+    //////no response mapping counterbalancing here/////
+    // let counterbalanceList = [1,2];
+    // shuffle(counterbalanceList);
+    let counterbalance = 1//counterbalanceList[0];
+    console.log(counterbalance);
+    let respMapping = {}
+
+    if (counterbalance == 1){
+      respMapping = {
+        parity:["Odd","Even"],
+        magnitude:["Less","Greater"]
+      }
+    }
+
+    let parityKeys = respMapping['parity'];
+    let magnitudeKeys = respMapping['magnitude'];
+
+
+    ////////loading experiment timing parameters (ms) and letiables
+    let fixDuration = 500,stimDuration = 3000,feedbackDuration = 500;
+    let trialDuration = fixDuration+1000+feedbackDuration;
+
+    let order;
+    let blockCounter = -1;
+    let blockNum = 4;
+    let practiceBlockNum = 3;
+
+    let trialCounter = -1;
+    let trialNum;
+    let trialList = [];
+    let cueList = [];
+    let stimList = [];
+    let trialType;
+    let task;
+    let cueColor;
+
+    let stim;
+    let magnitude;
+    let parity;
+
+    let CorrKey;
+    let key;
+    let accuracy;
+    let accCount = 0;
+    let keyPressed = 0;
+    let respTime;
+
+    let data = [['']]; //data logfile
+    let logCounter = 0; //counter for each data entry
+
+    //timing variables
+    let d2 = new Date();
+    let runStart; //when a block starts
+    let responset; //response onset
+    let screenPulled = d2.getTime(); //when the DOM loads
+
+    //decide which task gets practiced first
+    let random = ["magnitude","parity"];
+    shuffle(random);
+    let this_task_first = random[0];
+
+
+//////////////////////////////////////////////////////////////INSTRUCTIONS //////////////////////////////////////////////////////////////
+//these instructions are for the double screen task, but for simplicity's sake I've taken out all the double screen code and this task only consists of numbers in the middle of the screen
+
+//define function for clearing screen of instructions
+    function hideInstruct()
+    {
+      $("#startTask").hide();
+      $("#StartInstruct").hide();
+      $("#ReadInstructions").hide();
+      $("#InstructionsHeader").hide();
+      $("#NextButton").hide();
+      $("#Instructions").hide();
+      $("#Instructions1").hide();
+      $("#Instructions2").hide();
+      $("#Instructions3").hide();
+      $("#Instructions4").hide();
+      $("#Instructions5").hide();
+      $("#Instructions6").hide();
+      $("#Instructions7").hide();
+      $("#Instructions8").hide();
+      $("#Instructions9").hide();
+      $("#Instructions10").hide();
+      $("#Instructions11").hide();
+      $("#Instructions12").hide();
+      $("#instr").hide();
+      $("#par_pract1").hide();
+      $("#mag_pract1").hide();
+      $("#frames").hide();
+      $("#keyboard").hide();
+      $("#startButton").hide();
+      $("#endBlockButton").hide();
+      $("#buttonPressReminder").hide();
+    }
+
+    hideInstruct();
+
+    function Prep()
+    {
+      $("#ReadInstructions").show();
+      $("#InstructionsHeader").show();
+      $("#StartInstruct").show();
+    }
+    // How long you want to wait before instructions are shown (sometimes you want to add 3000 ms so that your images load). This is not necessary when we're using numbers so I put in 3 ms.
+	  setTimeout(Prep, 3);
+
+    let slideNum=0; //current instruction slide number
+    let maxNum=7; //total number of instructions slides
+
+    //these buttons move the instructions screens along
+    $("#startTask").on ('click', function(){
+      hideInstruct();
+      $("#startButton").show();
+    });
+
+    $("#NextButton").on('click', function(){
+      slideNum=slideNum+1;
+      moveShow(slideNum);
+    });
+
+    $("#StartInstruct").on('click', function(){
+      $("#StartInstruct").hide()
+      $("#NextButton").show()
+      moveShow(slideNum);
+    });
+
+    //set instructions text
+    $("#Instructions").text("In this experiment, you will see two frames on the left and right sides of the screen. On every trial, one frame will be bolded in black while the other stays gray. In this following example, the left frame is bolded.");
+    $("#Instructions1").text('Pay attention to the bolded frame. You will need to identify the number that appears in it as odd or even OR as greater than or less than five.')
+    $("#Instructions2").text("The font color of the number will tell you which task to complete.")
+    if (this_task_first == 'magnitude'){
+      $("#Instructions3").text('In this first practice task, numbers in the bolded frame will be in RED or ORANGE front. RED and ORANGE fonts mean you have to identify the number as less than five or greater than five.');
+      $("#Instructions4").text('For the first half of this task, the LEFT frame will be bolded. When the LEFT frame is bolded, press "d" if the number is LESS than five and press the "f" if the number is GREATER than five.');
+      $("#Instructions5").text('For the second half of this task, the RIGHT frame will be bolded. When the RIGHT frame is bolded, press "j" if the number is LESS than five and press "k" if the number is GREATER than five.');
+    } else {
+      $("#Instructions3").text('In this first practice task, numbers in the bolded frame will be in BLUE or GREEN front. BLUE and GREEN fonts mean you have to identify the number as odd or even.');
+      $("#Instructions4").text('For the first half of this task, the LEFT frame will be bolded. When the left frame is bolded, press "d" if the number is ODD and press "f" if the number is EVEN.');
+      $("#Instructions5").text('For the second half of this task, the RIGHT frame will be bolded. When the RIGHT frame is bolded, press "j" if the number is ODD and press "k" if the number is EVEN.');
+    }
+    $("#Instructions6").text("Here is a reminder of the task colors and the buttons to use for each frame. You will have until the number disappears to make a response in each trial. Try to answer as quickly and accurately as you can.")
+    $("#Instructions7").text("Click on the START button to begin.")
+
+    //move through instructions slides depending on slide number (which gets updated each time NextButton is clicked)
+    function moveShow(slideNum){
+      if (slideNum==0){ $("#Instructions").show();
+        $('<img id = "frames" src = "frames.jpg" style="max-width: '+(canvas.width-10)+'; height: auto; align" class = "center">').insertAfter("#Instructions");
+      }
+      else if (slideNum==1){$("#Instructions1").show();}
+      else if (slideNum==2){$("#Instructions2").show();}
+      else if (slideNum==3){$("#Instructions3").show();}
+      else if (slideNum==4){$("#Instructions4").show();}
+      else if (slideNum==5){$("#Instructions5").show();}
+      else if (slideNum==6){$("#Instructions6").show();
+        if (this_task_first == "magnitude") {
+          $('<img id = "mag_pract1" src = "mag_pract1.jpg" style="max-width: '+(canvas.width-10)+'; height: auto; align" class = "center">').insertAfter("#Instructions6");
+        } else {
+          $('<img id = "par_pract1" src = "par_pract1.jpg" style="max-width: '+(canvas.width-10)+'; height: auto; align" class = "center">').insertAfter("#Instructions6");
+        }
+      }
+      else if(slideNum ==7){$("#Instructions7").show();}
+
+      if (slideNum==0)
+      {
+         $("#NextButton").show();
+      }
+      else if (slideNum < maxNum)
+      {
+         $("#NextButton").show();
+      }
+      else
+      {
+         $("#NextButton").hide();
+         $("#startTask").show();
+      }
+
+    }
+
+    //////////////////////////////////////////////////////////////EXPERIMENT BEGINS//////////////////////////////////////////////////////////////
+
+    //option for testing: only two trials per block and faster stim durations for testing
+    let test = 0; //change to 0 for real experiment
+
+    //hide all those random buttons and html elements
+    function hideTS(){
+      $("#indicator").hide();
+  		$("#submitButton").hide();
+  		$("#endBlockButton").hide();
+      $("#startPostTest").hide();
+  		$("#resize").hide();
+      $("#mturk_form").hide();
+  		$("#startButton").hide();
+  		$("#info").hide();
+  		$("#continueButton").hide();
+  		$("#workerInstruct").hide();
+  		$("#startPostTest").hide();
+  		$("#PostTestQ").hide();
+  		$("#demoCode").hide();
+  		$("#returnButton").hide();
+  		$("#iframewarning").hide();
+  		$("#screensize").hide();
+      $("#blockCount").hide();
+      $("#blockCount2").hide();
+      $("#blockCount3").hide();
+      $("#buttonPressReminder").hide();
+    }
+
+    hideTS();
+
+    window.hasResponse = -1
+
+    ctx.textAlign="center";
+    ctx.textBaseline="middle";
+
+    //button to start task!
+    $("#startButton").click(function(){
+      $("#startButton").hide();
+      hideTS();
+      ctx.clearRect(0,0,canvas.width, canvas.height);
+      runBlock();
+    });
+
+    //run next block
+    $("#endBlockButton").click(function(){ // when a block is finished, this button would run another block
+      $("#endBlockButton").hide();
+      $("#indicator").hide();
+      $("#blockCount").hide();
+      $("#blockCount2").hide();
+      $("#blockCount3").hide();
+      $("#buttonPressReminder").hide();
+      $(".center").remove();
+      runBlock()
+    });
+
+    $("#resize").click(function(){ // to make sure that people are paying attention and don't have more than one task going, this fxn won't let a run start without a large enough window size
+      $("#resize").hide(); // once they click the button, the task will start only if the proper screen portions are in place
+      $("#indicator").hide();
+      $("#endBlockButton").hide();
+      checkSize();
+    });
+
+    //block randomization
+    let block_cb = ["high_first","low_first"]
+    shuffle(block_cb)
+    order = block_cb[0];
+    if (order == "high_first"){
+      lol_blocks = ["high","low","high","low","high","low","high","low"];
+    } else { lol_blocks = ["low","high","low","high","low","high","low","high"] }
+    let blockOrd = ['a','b','c'].concat(lol_blocks);
+    console.log(blockOrd);
+
+    function runBlock(){
+      accCount = 0;
+      blockCounter++;
+      block = blockOrd[blockCounter];
+      console.log(block);
+
+      if (blockCounter < (blockNum+practiceBlockNum)){
+        trialCounter = -1;
+        window.hasResponse = -1;
+        accuracy = 0;
+        cueList = [];
+        stimList = [];
+
+        //shuffle images and resent image counters
+        shuffle(digits);
+
+        //set triallists for all practice and experiment blocks
+
+        if (block == 'a') {
+          //single task blocks
+          trialNum = 21;
+          switchProportion = 'none';
+
+          if (this_task_first == "magnitude"){
+            trialList = ['A','A','A','A','A','A','A','A','A','A','A','A','A','A','A','A','A','A','A','A','A'];
+          } else {
+            trialList = ['B','B','B','B','B','B','B','B','B','B','B','B','B','B','B','B','B','B','B','B','B'];
+          }
+        } else if (block == 'b') {
+            switchProportion = 'none';
+            trialNum = 21;
+            if (this_task_first == "magnitude"){
+              trialList = ['B','B','B','B','B','B','B','B','B','B','B','B','B','B','B','B','B','B','B','B','B'];
+            } else {
+              trialList = ['A','A','A','A','A','A','A','A','A','A','A','A','A','A','A','A','A','A','A','A','A'];
+            }
+        } else if (block == 'c'){
+          trialList = PS_50()
+          switchProportion = 'switch50'
+          trialNum = 41;
+        } else if (block == "low") {
+          //experimental blocks
+          trialList = PS_low();
+          switchProportion = 'low';
+          trialNum = 121;
+        } else if (block == "high") {
+          trialList = PS_high();
+          switchProportion = 'high';
+          trialNum = 121;
+        }
+
+        checkSize();
+
+        if (test == 1) {
+          trialNum = 2;
+          fixationDuration = 1;
+          stimDuration = 1;
+          feedbackDuration = 1;
+        }
+      }
+
+      else{
+        $("#RTs").val(data.join(";"));
+        //$("#RTs", opener.window.document).val(data.join(";"));
+        $("#startPostTest").show();
+  			$("#screensize").show();
+      }
+    }
+
+    // adapted from: http://stackoverflow.com/questions/3437786/get-the-size-of-the-screen-current-web-page-and-browser-window
+    function checkSize(){
+      let w = window.innerWidth;
+      let h = window.innerHeight;
+      if (w < canvas.width || h < canvas.height)
+          {
+        $("#indicator").text('Your browser window is too small to display the images properly. Please increase the window size or your screen resolution.');
+          $("#indicator").show();
+        $("#resize").show();
+      }
+      else // if their screen is the proper size...
+      {
+        countDown(3); // start the countdown for the experiment
+      }
+    }
+
+    function countDown(time){ // the countdown is meant to "prepare" the subjects that the experiment is beginning
+      if (time > 0){
+        ctx.fillStyle="black";
+        ctx.font="100px Arial";
+        ctx.clearRect(0,0, canvas.width, canvas.height);
+        ctx.fillText("" + time, canvas.width / 2, canvas.height / 2);
+        setTimeout(function(){countDown(time - 1)},1000);
+      }
+      else{
+        d1 = new Date();
+        runStart = d1.getTime() - screenPulled;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawFixation(); // once the countdown is finished, it goes to the ITI; this way, subs are less likely to mess up the first trial, i.e. if the number was suddenly presented right after a 3-2-1 counter
+      }
+    }
+
+    function drawFixation(){
+      window.hasResponse = -1;
+
+      //define a bunch of trial parameters
+      respTime = undefined;
+      accuracy = 0;
+      trialType = '';
+      cueType = '';
+
+      trialCounter++
+
+      if (trialCounter < trialNum){
+        keyPressed = 0;
+        task = trialList[trialCounter];
+        CorrKey = 0;
+
+        //randomly selecting stimulus from list of possible digits
+        shuffle(digits)
+        stim = digits[0];
+
+        //keep drawing random stimulus numbers until it's not the same as the previous one
+        if (stimList != []){
+          while (stim == stimList[stimList.length-1]) {
+            shuffle(digits);
+            stim = digits[0];
+          }
+        }
+        stimList.push(stim); //keep track of presented stimuli in a list
+
+        //determine magnitude and parity of each stim
+        if (stim < 5) {magnitude = "Less";} else {magnitude = "Greater";}
+        if (stim%2 != 0) {parity = "Odd";} else {parity = "Even";}
+
+        //set cues & corr keys
+        //only using left screen keys
+        if (task == "A"){ //magnitude
+          cueColor = "DarkRed";
+          if (magnitude == magnitudeKeys[0]) {CorrKey = 'd';}
+          else {CorrKey = 'f';}
+        } else {  //parity
+          cueColor = "Navy";
+          if (parity == parityKeys[0]) {CorrKey = 'd';}
+          else {CorrKey = 'f';}
+        }
+
+        //ensuring cue switches so both task switch and repeats involve cue switches
+        cueList.push(cueColor)
+        if (cueList.length > 1) {
+          if (cueColor == cueList[cueList.length-2]){
+            cueColor = switchCues(cueColor);
+            cueList.splice(cueList.length-1, 1, cueColor); //replace current cueColor
+          }
+        }
+
+        //calculate trial type
+        if (trialCounter > 0){
+          if (trialList[trialCounter] == trialList[trialCounter-1]){
+          trialType = 'repeat';
+          } else {
+            trialType = 'switch';
+          }
+        }
+
+        ///start drawing stuff
+        ctx.clearRect(0,0,canvas.width, canvas.height);
+
+        //fixation points
+        ctx.fillStyle = "grey";
+        ctx.font = "50px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(".",canvas.width/2, (canvas.height/2)-13);
+
+        setTimeout(drawStim, fixDuration);
+      }
+      //block ends
+      else {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        let accsum = Math.round((accCount/trialNum) * 100);
+        if (block == 'a'){
+          if (this_task_first == "magnitude"){
+            $("#blockCount").text('You have completed the practice block '+(blockCounter+1)+'. Your accuracy is ' +accsum+ '%. In the next practice task, numbers will be in BLUE/GREEN font, which means that you should identify them as odd or even.');
+            $("#blockCount2").text('If the left frame is bolded, press "d" if the number is ODD and "f" if the number is EVEN.');
+            $("#blockCount3").text('If the right frame is bolded, press "j" if the number is ODD and press "k" if the number is EVEN.');
+          } else {
+            $("#blockCount").text('You have completed the practice block '+(blockCounter+1)+'. Your accuracy is ' +accsum+ '%. In the next practice task, numbers will be in RED/ORANGE font, which means that you should identify them as less than or greater than five.');
+            $("#blockCount2").text('If the left frame is bolded, press "d" if the number is LESS than five and "f" if the number is GREATER than five.');
+            $("#blockCount3").text('If the right frame is bolded, press "j" if the number is LESS than five and "k" if the number is GREATER than five.');
+          }
+          $("#blockCount").show();
+          $("#blockCount2").show();
+          $("#blockCount3").show();
+        } else if (block == 'b'){
+          $("#blockCount").text("You have completed practice "+(blockCounter+1)+". Your accuracy is " +accsum+ "%. Next, in this last practice block you will do both tasks together. The numbers will appear in all four colors.");
+          $("#blockCount2").text("If the number is in RED/ORANGE font, identify it as less than or greater than five.");
+          $("#blockCount3").text("If the number is in BLUE/GREEN font, identify it as odd or even.");
+          $("#blockCount").show();
+          $("#blockCount2").show();
+          $("#blockCount3").show();
+        } else if (block == 'c'){
+          $("#blockCount").text("Your accuracy is in the last practice block is " +accsum+ "%. You are now ready to start the main experiment. In these blocks, the bolded frame will switch from left to right randomly.");
+          $("#blockCount2").text("There will be four main experiment blocks, and each should take about five minutes depending on how quickly you respond.");
+          $("#blockCount").show();
+          $("#blockCount2").show();
+        } else if (blockCounter > practiceBlockNum - 1){
+          $("#blockCount").text("You have completed block " + (blockCounter-practiceBlockNum+1) + " out of "+blockNum+". Your accuracy is " + accsum + "%. You may take a short break, but please return to the experiment within 3 minutes.");
+          $("#blockCount").show();
+        }
+
+
+
+        if (block == 'a'){
+          if(this_task_first == "magnitude"){
+            $('<img id = "par_pract1" src = "par_pract1.jpg" style="max-width: '+(canvas.width-200)+'; height: auto; align" class = "center">').insertAfter("#blockCount3");
+          } else {
+            $('<img id = "mag_pract1" src = "mag_pract1.jpg" style="max-width: '+(canvas.width-200)+'; height: auto; align" class = "center">').insertAfter("#blockCount3");
+          }
+        } else {
+          $('<img id = "instr" src = "instr_pic.jpg" style="max-width: '+(canvas.width-200)+'; height: auto; align" class = "center">').insertAfter("#blockCount3");
+        }
+
+        $("#endBlockButton").show();
+      }
+    }
+
+    function drawStim(){
+      d6 = new Date();
+      stimOnset = d6.getTime() - runStart;
+      window.hasResponse = 0;
+      //clear fixations
+      ctx.clearRect(0,0,canvas.width, canvas.height);
+      ctx.font = "70px Arial";
+      ctx.textAlign = "center";
+      ctx.fillStyle = cueColor;
+      ctx.fillText(stim, canvas.width/2, canvas.height/2);
+      timeout = setTimeout(drawFeedback, stimDuration);
+    }
+
+    function drawFeedback(){
+      ctx.clearRect(0,0,canvas.width, canvas.height);
+
+      window.hasResponse = -1
+
+      //style for feedback
+      ctx.fillStyle = "grey";
+      ctx.font = "24px Arial";
+      ctx.textAlign = 'center';
+
+      if (respTime == undefined) {
+        ctx.fillText("too slow",canvas.width/2, canvas.height/2);
+      } else {
+        if (accuracy == 1){
+          ctx.fillText("correct",canvas.width/2, canvas.height/2);
+        }
+        else if (accuracy == 0){
+          ctx.fillText("incorrect",canvas.width/2, canvas.height/2);
+        }
+      }
+
+      setTimeout(drawFixation, feedbackDuration);
+
+      //log data after response
+      data[logCounter++] = ["ISSP_Ln:",counterbalance,order,logCounter,blockCounter,block,trialCounter,screenType,task_L,task_R,trialType_L,trialType_R,switchProportion,CorrKey,keyPressed,accuracy,respTime,stim_L,stim_R,magnitude_L,magnitude_R,parity_L,parity_R];
+      console.log(data)
+
+    } //closing draw feedback function
+
+    //listening for keypresses
+    $("body").keydown(function(event){
+  		if (window.hasResponse == 0){ // this ensures that it's getting the key that was pressed AFTER the stimulus was presented
+  			keyPressed = event.key; // identifies which key was pressed
+        keyPressed = keyPressed.toLowerCase(); //in case caps lock was on
+        all_keys = ['d','f']
+        if (all_keys.includes(keyPressed)){
+          window.hasResponse = -1; // this makes certain that keypresses aren't logged after that
+  				d5 = new Date();
+  				Responset = d5.getTime() - runStart;
+  			  respTime = Responset - stimOnset;
+          if (respTime < stimDuration){ // compares keypress to the correct press for a trial
+            if (keyPressed == CorrKey) {
+              accuracy = 1;
+              accCount++;}
+          }
+          clearTimeout(timeout);
+          drawFeedback();
+        }
+  		}
+    });
+
+  });
+
+</script>
+
+</head>
+
+<body>
+  <h2 id="InstructionsHeader" style="font-size:30px;text-align: center">Instructions</h2>
+  <p id="ReadInstructions" style="font-weight:bold;margin-left:auto; margin-right:auto; width: 45em">Please read these instructions carefully before you begin the experiment.</p>
+  <p id="Instructions" style="margin-left:auto; margin-right:auto; width: 45em"></p>
+  <p id="Instructions1" style="margin-left:auto; margin-right:auto; width: 45em"></p>
+  <p id="Instructions2" style="margin-left:auto; margin-right:auto; width: 45em"></p>
+  <p id="Instructions3" style="margin-left:auto; margin-right:auto; width: 45em"></p>
+  <p id="Instructions4" style="color:grey;margin-left:auto; margin-right:auto; width: 40em"></p>
+  <p id="Instructions5" style="color:grey;margin-left:auto; margin-right:auto; width: 40em"></p>
+  <p id="Instructions6" style="margin-left:auto; margin-right:auto; width: 45em"></p>
+  <p id="Instructions7" style="margin-left:auto; margin-right:auto; width: 45em"></p>
+  <p id="Instructions8" style="margin-left:auto; margin-right:auto; width: 45em"></p>
+  <p id="Instructions9" style="margin-left:auto; margin-right:auto; width: 45em"></p>
+  <p id="Instructions10" style="margin-left:auto; margin-right:auto; width: 45em"></p>
+  <p id="Instructions11" style="margin-left:auto; margin-right:auto; width: 45em"></p>
+  <p id="Instructions12" style="margin-left:auto; margin-right:auto; width: 45em"></p>
+
+  <p id="blockCount" style="text-align: center; margin-left:auto; margin-right:auto; width: 45em"></p>
+  <p id="blockCount2" style="text-align: center; margin-left:auto; margin-right:auto; width: 45em"></p>
+  <p id="blockCount3" style="text-align: center; margin-left:auto; margin-right:auto; width: 45em"></p>
+
+  <!--the HTML for the demographics questionnaire-->
+  <div id="demographics" style="font-family: Arial; color: black; font-size: 20px; text-align: center; align: center; display: none">
+  	<p> <b> Please answer the demographic questions below:</b></p><br /> <br />
+  	<p> <b> Gender: </b> </p> <br />
+  	<select id="gender">
+  		<option value="">Select Gender</option>
+  		<option value="F">Female</option>
+  		<option value="M">Male</option>
+  		<option value="T">Trans*</option>
+  		<option value="NA">Do not wish to reply</option>
+  	</select>
+
+  	<br /> <p><b> Age: </b></p> <br />
+  	<input id="age" name="Age" value="" placeholder="Enter Age"></input>
+
+  	<br /> <p><b> Ethnicity:</b></p> <br />
+  	<select id="ethnicity">
+  		<option value="">Select Ethnicity</option>
+  		<option value="HL">Hispanic/Latino</option>
+  		<option value="NHL">Non-Hispanic/Latino</option>
+  		<option value="NA">Do not wish to reply</option>
+  	</select>
+
+  	<br /> <p><b>Race: </b></p> <br />
+  	<select id="race">
+  		<option value="">Select Race</option>
+  		<option value="AI">American Indian/Alaska Native</option>
+  		<option value="A">Asian</option>
+  		<option value="NH">Native Hawaiian/Other Pacific Islander</option>
+  		<option value="AA">African American/Black</option>
+  		<option value="W">Caucasian/White</option>
+  		<option value="M">Multiracial</option>
+  		<option value="O">Other</option>
+  		<option value="NA">Do not wish to reply</option>
+  	</select>
+  	<br>
+  	<br /> <br /> <button id="demoSubmit" a id="dyn-bttn" class="button button1" style="float:center;">Submit Demographics</button>
+  </div>
+
+  <table>
+    <tr>
+      <td>
+        <p><button class="button button1" id="NextButton" style="float: center;">Next</button></p>
+        <p><button class="button button1" id="StartInstruct" style="float: center;">Next</button></p>
+        <p><button class="button button1" id="startTask" style="float: center;">START</button></p>
+
+        <p id="indicator" style="font-family: Arial; color: black; font-size: 50px; text-align:center; align: center; float: center"></p>
+        <p><button class="button button1" id="resize" style="float: center;">Try resizing again.</button></p>
+        <p><button class="button button1" id ="startButton" style="float: center;">Start Practice</button></p>
+        <p><button class="button button1" id="endBlockButton" style="float: center;">You may take a short break. Click this button when you are ready to continue the task.</button></p>
+        <input id="events_input" name="events_input" type="hidden">
+
+        <form id="mturk_form" method="POST" action="https://dibs-web01.vm.duke.edu/AMTSubmit/DataHandlerSONA_AC.php">
+          <input type="hidden" id="assignmentId" name="assignmentId" value="">
+          <input type="hidden" id="workerId" name="workerId" value="">
+          <input type="hidden" id="hitId" name="hitId" value="">
+          <input type="hidden" id="RTs", name="RTs", value="">
+          <input type="hidden" id="SONAurl" name="SONAurl" value="">
+          <input type="hidden" id="ExpName" name="ExpName" value="double_screen">
+          <input type="hidden" id="demos" name="demos" value="">
+          <input id="submitButton" style="font-family: Arial; color: black; font-size: 36px; text-align:center; align: center" type="submit" name="Finish" value="Submit">
+        </form>
+
+        <p id="screensize" style="font-family: arial; font-size: 40px; text-align:center; align: center; float: center">Click on the button below to fill out the post-test questionnaire:</p>
+        <p><button class="button button1" id="startPostTest" style="float: center;">post-test questionnaire</button></p>
+        <canvas id = "myCanvas" width = "1000" height = "600""></canvas>
+      </td>
+    </tr>
+  </table>
+
+</body>
+
+</html>

@@ -1,0 +1,54 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<link rel="stylesheet" href="style.css" type="text/css" charset="utf=8">
+<script type="text/javascript" src="jquery-3.1.1.js"></script>
+<script type="text/javascript">
+$(document).ready(function(){
+    $("#ICAgreeButton").click(function(){
+	    opener.informedConsentAction(true);
+		opener.updateMainMenu(1);
+    	JavaScript:window.close();
+    });
+
+	$("#ICDisagreeButton").click(function(){
+	    opener.informedConsentAction(false);
+    	JavaScript:window.close();
+    });
+});
+
+</script>
+
+</head>
+<body>
+
+<p> This research study is conducted by Dr. Tobias Egner at the Center for Cognitive Neuroscience at Duke University. Its purpose is to examine the ease in which people switch between tasks. </p>
+
+<p> <b>Procedure:</b> In this experiment, you will be asked to categorize digits as odd/even or less/greater than five. You will have to switch between these two
+tasks within each block of the experiment.
+
+Once you are finished with the task, you will also be asked to answer a few questions about the experiment
+and about your demographics information. If any item on the questionnaires makes you uncomfortable, feel free
+to skip it, but please try to answer as many of the questions as you can.
+
+The entire experiment is expected to take about 30 minutes to complete.
+</p>
+
+<p><b>Risks and Benefits:</b> We know of no risks or benefits to you for participating in this research study. The
+potential benefits of this research lie in the knowledge that will be acquired.</p>
+
+<p><b>Confidentiality:</b> Our records will include the demographic information that you report (age, gender, etc.) as well as your task performance data and questionnaire responses. We employ a participant code system to ensure that this information is not directly linked to your name or consent form. The consent and demographic forms as well as the de-identified performance and questionnaire data will be stored in a locked and secure location. All data will be kept for at least six years or as long as is required by Duke University or any journal that may publish these findings. If a report of this study is published or presented, only group results will be reported.</p>
+
+<p><b>Compensation:</b>For participating in this study, you will earn one course credit per hour of participation. Your participation is voluntary. You can discontinue participation at any time for any reason.</p>
+
+<p><b>Contact Information:</b> If you have additional questions regarding this study, please feel free to ask by emailing
+the researcher. If questions arise after the experiment, you may contact Professor Tobias Egner at tobias.egner@duke.edu
+or 919-684-1034 or the Human Subjects Protection at campusirb@duke.edu regarding your rights as a research subject.</p>
+
+<p>Please click to indicate your consent to participate in the study.</p>
+
+<button id="ICAgreeButton" style="font-family:arial;color:black;font-size:20px;">I have read the above consent form and agree to participate in the study.</button>
+<button id="ICDisagreeButton" style="font-family:arial;color:black;font-size:20px;">I do not agree to participate in the study.</button>
+
+</body>
+</html>
